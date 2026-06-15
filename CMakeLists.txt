@@ -57,4 +57,10 @@ else()
     link_libraries(${OpenFHE_SHARED_LIBRARIES})
 endif()
 
-add_executable(main src/main.cpp src/network/Tensor.cpp src/network/NeuralNetwork.cpp src/DataProcessor.cpp src/Encoder.cpp src/utils.cpp)
+add_executable(main
+    src/cpp/main.cpp
+    src/cpp/network/NeuralNetworkClear.cpp
+    src/cpp/network/NeuralNetworkCipher.cpp
+    src/cpp/Encoder.cpp
+    src/cpp/utils.cpp
+)
