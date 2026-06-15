@@ -2,3 +2,12 @@ build
 _CMakeLists.txt
 saved_data
 .vscode
+src/cpp/network/embedd.cpp
+src/cpp/openfhe_numpy
+src/python/__pycache__
+src/python/venv
+src/python/scatterplot
+include/Eigen
+include/openfhe_numpy
+data
+notebooks

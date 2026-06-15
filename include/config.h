@@ -1,0 +1,16 @@
+#pragma once
+
+#include "openfhe.h"
+
+struct CryptoConfig {
+  uint32_t mult_depth = 39;
+  uint32_t scaled_mod_size = 33;
+  uint32_t batch_size = 16;
+  lbcrypto::SecurityLevel security_level = lbcrypto::HEStd_128_classic;
+};
+
+struct TrainConfig {
+  int epochs = 3;
+  double learning_rate = 0.1;
+  std::vector<size_t> layers{1};
+};

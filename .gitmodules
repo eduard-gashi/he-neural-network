@@ -1,0 +1,3 @@
+[submodule "openfhe-numpy"]
+	path = openfhe-numpy
+	url = https://github.com/openfheorg/openfhe-python.git

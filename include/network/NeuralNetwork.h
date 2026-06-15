@@ -1,26 +1,19 @@
 #pragma once
-#include "Tensor.h"
-#include <iostream>
+
 #include <vector>
 
 class NeuralNetwork {
 public:
-  std::vector<size_t> layers;
-  std::vector<Tensor> weights;
-  std::vector<Tensor> biases;
+  // Destructor
+  virtual ~NeuralNetwork() = default;
 
-  NeuralNetwork(const std::vector<size_t> &layers);
+  // Constructor
+  NeuralNetwork(const std::vector<size_t> &layers_) : layers(layers_) {};
 
-  void set_data(const Tensor &X, const Tensor &y);
-  Tensor forward(const Tensor &X);
-  double compute_loss(const Tensor &y_pred);
-  void train(int epochs, double learning_rate);
+  virtual void train(int epochs, double learning_rate) = 0;
 
-private:
-  Tensor _X_train;
-  Tensor _y_train;
-
-  Tensor sigmoid(const Tensor &z);
-  Tensor sigmoid_deriv(const Tensor &s);
-  Tensor matmul(const Tensor &a, const Tensor &b);
+protected:
+  virtual void initializeWeightsAndBias() = 0;
+  std::vector<size_t> layers; // Contains the amount of neurons for each layer
+  std::vector<size_t> shape;  // [rows, col]
 };
