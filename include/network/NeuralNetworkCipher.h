@@ -33,6 +33,15 @@ public:
   reluDeriv(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> y_pred,
             size_t slots) const;
 
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+  sigmoid(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> y_pred, size_t slots) const;
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+  sigmoidDeriv(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> y_pred,
+               size_t slots) const;
+
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+  predict(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &x) const;
+
 protected:
   void initializeWeightsAndBias() override;
 

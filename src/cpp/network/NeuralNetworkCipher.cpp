@@ -2,6 +2,7 @@
 #include "network/NeuralNetworkCipher.h"
 #include "network/NeuralNetwork.h"
 #include "openfhe.h"
+#include "utils.h"
 #include <tuple>
 
 void NeuralNetworkCipher::initializeWeightsAndBias() {
@@ -15,14 +16,13 @@ void NeuralNetworkCipher::initializeWeightsAndBias() {
 
     std::vector<std::vector<double>> base_w(
         rows, std::vector<double>(
-                  cols, 1.0)); // prev = COls, layers[i] = Rows = Neurons
-    base_w[0] = std::vector<double>(cols, 0.0);
+                  cols, 0.0)); // prev = Cols, layers[i] = Rows = Neurons
     auto weights_ctxt =
         encoder.encodeMatrixPadded(base_w); // Encrypt every column of weights
     weights_encoded.push_back(weights_ctxt);
 
     std::vector<std::vector<double>> bias(shape[0],
-                                          std::vector<double>(cols, 1.0));
+                                          std::vector<double>(cols, -1.0));
     auto bias_ctxt = encoder.encodeMatrixOnce(bias);
     bias_encoded.push_back(bias_ctxt);
 
@@ -52,7 +52,7 @@ NeuralNetworkCipher::relu(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> y_pred,
   double lower_bound = 0;
   double upper_bound = 5;
 
-  uint32_t poly_degree = 3; // Depends on multiplicative depth
+  uint32_t poly_degree = 1; // Depends on multiplicative depth
 
   auto result = encoder.applyChebyshevApproximation(
       [](double x) -> double {
@@ -71,7 +71,7 @@ NeuralNetworkCipher::reluDeriv(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> z,
                                size_t slots) const {
   double lower_bound = 0.0;
   double upper_bound = 5.0;
-  uint32_t poly_degree = 3; // Depends on the multiplicative depth
+  uint32_t poly_degree = 1; // Depends on the multiplicative depth
 
   auto result = encoder.applyChebyshevApproximation(
       [](double x) -> double {
@@ -81,6 +81,33 @@ NeuralNetworkCipher::reluDeriv(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> z,
           return 1;
       },
       z, lower_bound, upper_bound, poly_degree);
+
+  return result;
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+NeuralNetworkCipher::sigmoid(lbcrypto::Ciphertext<lbcrypto::DCRTPoly> z_out,
+                             size_t slots) const {
+  double lower_bound = -2.0;
+  double upper_bound = 1.0;
+  uint32_t poly_degree = 3; // Depends on the multiplicative depth
+
+  auto result = encoder.applyChebyshevApproximation(
+      [](double z) -> double { return (1.0 / (1.0 + std::exp(-z))); }, z_out,
+      lower_bound, upper_bound, poly_degree);
+
+  return result;
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly> NeuralNetworkCipher::sigmoidDeriv(
+    lbcrypto::Ciphertext<lbcrypto::DCRTPoly> h_out, size_t slots) const {
+  double lower_bound = -6.0;
+  double upper_bound = 1.0;
+  uint32_t poly_degree = 3; // Depends on the multiplicative depth
+
+  auto result = encoder.applyChebyshevApproximation(
+      [](double h) -> double { return (h * (1 - h)); }, h_out, lower_bound,
+      upper_bound, poly_degree);
 
   return result;
 }
@@ -128,7 +155,7 @@ NeuralNetworkCipher::forward(
     z = encoder.add(z, bias_encoded[i]);
 
     // Apply relu activation
-    h = relu(z, num_rows);
+    h = sigmoid(z, num_rows);
 
     z_layers.push_back(z);
     h_layers.push_back(h);
@@ -145,31 +172,34 @@ void NeuralNetworkCipher::train(int epochs, double learning_rate) {
   double loss = 0.0f;
   auto lr = encoder.encodeMatrixPadded({{learning_rate}});
 
+  std::vector<std::vector<double>> mask_mat({{1, 1, 1, 1, 1}, {0, 0, 0, 0, 0}});
+  auto mask = encoder.encodeMatrixOnce(mask_mat);
+
   for (int epoch = 1; epoch <= epochs; epoch++) {
     // Forward Pass
     auto [z_layers, h_layers] = forward(X);
 
     // Extract final predictions
     auto h_out = h_layers.back();
-    auto z_out = z_layers.back();
+    h_out = encoder.mult(h_out, mask);
 
     // Compute error and loss
     auto ct_error = encoder.sub(h_out, y);
     loss = mseLoss(ct_error, shape[0]);
 
     // Backprop
-    for (int l = layers.size() - 1; l >= 0; l--) {
+    for (int layer = layers.size() - 1; layer >= 0; layer--) {
       // Compute delta term: 2/N * error
       auto delta = encoder.mult(scale, ct_error);
 
       // Compute relu derivative: Relu'(z)
-      auto relu_deriv = reluDeriv(z_out, shape[0]);
+      auto relu_deriv = sigmoidDeriv(h_out, shape[0]);
 
       // Multiply delta term with relu' and extract result
       delta = encoder.mult(delta, relu_deriv);
 
       // Compute gradient of bias: Summation of every column of delta
-      auto grad_b = encoder.sumColumn(delta, shape[0], shape[1]);
+      auto grad_b = encoder.sumSlots(delta, shape[0]);
 
       // Compute gradient of weights: Xt * delta
       auto grad_w = encoder.matmulXtDelta(Xt, delta, shape[0], shape[1] - 1);
@@ -178,8 +208,8 @@ void NeuralNetworkCipher::train(int epochs, double learning_rate) {
       auto update_b = encoder.mult(lr, grad_b);
       auto update_w = encoder.mult(lr, grad_w);
 
-      bias_encoded[l] = encoder.sub(bias_encoded[l], update_b);
-      weights_encoded[l] = encoder.sub(weights_encoded[l], update_w);
+      bias_encoded[layer] = encoder.sub(bias_encoded[layer], update_b);
+      weights_encoded[layer] = encoder.sub(weights_encoded[layer], update_w);
     }
     std::cout << "[CIPHERTEXT] Training process running.. Epoch " << epoch
               << "/" << epochs << std::endl
@@ -192,4 +222,26 @@ void NeuralNetworkCipher::train(int epochs, double learning_rate) {
             << "Loss:\n"
             << loss << std::endl
             << std::endl;
+
+  // Save Weights and Bias as json files
+  // save_ciphertext(weights_encoded[0], "weights_ctxt.json");
+  // save_ciphertext(bias_encoded[0], "bias_ctxt.json");
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly> NeuralNetworkCipher::predict(
+    const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &X_test) const {
+  // Compute prediction for unseen data: X_test*W + b
+  auto y_pred =
+      encoder.matmulXW(X_test, encoder.rotate(weights_encoded[0], 1), 2);
+  y_pred = encoder.add(y_pred, bias_encoded[0]);
+  y_pred = encoder.extractColumn(y_pred, 1, shape[1], 1);
+  // y_pred = encoder.applyChebyshevApproximation(
+  //     [](double x) -> double {
+  //       if (x < 0.5)
+  //         return 0.0;
+  //       else
+  //         return 1;
+  //     },
+  //     y_pred, 0.0, 1.5, 3);
+  return y_pred;
 }

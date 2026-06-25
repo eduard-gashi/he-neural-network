@@ -1,15 +1,21 @@
 #include "openfhe.h"
 #include <Eigen/Dense>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+
 
 // Needed for serialization
 #include "ciphertext-ser.h"
 #include "cryptocontext-ser.h"
 #include "key/key-ser.h"
 #include "scheme/ckksrns/ckksrns-ser.h"
+
+// Folder to save serialized Ciphertexts
+const std::filesystem::path DATAFOLDER =
+    std::filesystem::path(__FILE__).parent_path() / "saved_data";
 
 size_t cleartext_memory(const Eigen::MatrixXd &matrix) {
   size_t size = static_cast<size_t>(matrix.rows()) *
@@ -41,6 +47,9 @@ ciphertext_memory_ser(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt) {
 
 void save_ciphertext(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt,
                      const std::string &filename) {
-  lbcrypto::Serial::SerializeToFile(filename, ctxt, lbcrypto::SerType::JSON);
-  std::cout << "Serialized ciphertext to JSON file: " << filename << std::endl;
+  std::filesystem::create_directories(DATAFOLDER);
+  std::filesystem::path fullpath = DATAFOLDER / filename;
+  lbcrypto::Serial::SerializeToFile(fullpath.string(), ctxt,
+                                    lbcrypto::SerType::JSON);
+  std::cout << "Serialized ciphertext to JSON file: " << fullpath << std::endl;
 }

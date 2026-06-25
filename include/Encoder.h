@@ -80,6 +80,13 @@ public:
   sumColumn(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &matrix, size_t rows,
             size_t cols) const;
 
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+  rotate(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt,
+         int32_t slots) const;
+
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly> applyBootstrapping(
+      const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt) const;
+
   // Chebychev approximation
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly> applyChebyshevApproximation(
       const std::function<double(double)> &func,

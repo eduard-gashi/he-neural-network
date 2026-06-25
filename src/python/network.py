@@ -1,20 +1,20 @@
 import tensorflow as tf
 import numpy as np
 
-NUM_EPOCHS = 3
+NUM_EPOCHS = 1
 
 if __name__ == "__main__":
     X = np.array([[0, 0], [3, 1], [0, 1], [0, 3], [2, 2]])
     y = np.array([0, 1, 0, 1, 1])
 
-    kernel_init = tf.constant_initializer([[1], [1]])
-    bias_init = tf.constant_initializer([1])
+    kernel_init = tf.constant_initializer([[0.0], [0.0]])
+    bias_init = tf.constant_initializer([-1])
 
     model = tf.keras.Sequential(
         [
             tf.keras.layers.Dense(
                 1,
-                activation="relu",
+                activation="sigmoid",
                 kernel_initializer=kernel_init,
                 bias_initializer=bias_init,
             )
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     )
 
     loss_fn = tf.keras.losses.MeanSquaredError()
-    optimizer = tf.keras.optimizers.SGD(learning_rate=0.1)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=1.3)
 
     for epoch in range(NUM_EPOCHS):
         with tf.GradientTape() as tape:
@@ -38,3 +38,8 @@ if __name__ == "__main__":
         print("Gradients:", [g.numpy() for g in grads])
         print("Weights:", w)
         print("Bias:", b)
+
+    x_coefficient = (-(w[0] / w[1]))[0]
+    intercept = (-(b[0] / w[1]))[0]
+
+    print(f"Separation function y: {x_coefficient}*x + {intercept}")

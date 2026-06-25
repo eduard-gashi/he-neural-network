@@ -11,14 +11,22 @@ void Encoder::setupCryptoContext(uint32_t batch_size, uint32_t mult_depth,
   // Set security level, controls minimum ring dimension and modulus chain
   parameters.SetSecurityLevel(security_level);
 
-  // Multiplicative Depth, e.g. for x1*x2*x3 = 2
-  parameters.SetMultiplicativeDepth(mult_depth);
-
   // Bit-Length of the scaling factor D, determines the precision of stored data
   parameters.SetScalingModSize(scale_mod_size);
 
   // Number of slots used in the ciphertext, has to be < RingDimension / 2
   parameters.SetBatchSize(batch_size);
+
+  // For Bootstrapping
+  // auto secretKeyDist = lbcrypto::SecretKeyDist::UNIFORM_TERNARY;
+  // parameters.SetSecretKeyDist(secretKeyDist);
+  // std::vector<uint32_t> levelBudget = {4, 4};
+  // usint depth = mult_depth + lbcrypto::FHECKKSRNS::GetBootstrapDepth(
+  //                                levelBudget, secretKeyDist);
+  // parameters.SetMultiplicativeDepth(depth);
+
+  // Multiplicative Depth, e.g. for x1*x2*x3 = 2
+  parameters.SetMultiplicativeDepth(mult_depth);
 
   // Create CryptoContext Object
   cc = GenCryptoContext(parameters);
@@ -28,6 +36,7 @@ void Encoder::setupCryptoContext(uint32_t batch_size, uint32_t mult_depth,
   cc->Enable(lbcrypto::KEYSWITCH);
   cc->Enable(lbcrypto::LEVELEDSHE);
   cc->Enable(lbcrypto::ADVANCEDSHE);
+  // cc->Enable(lbcrypto::FHE);  // Needed for Bootstrapping
 
   std::cout << "CKKS scheme is using ring dimension " << cc->GetRingDimension()
             << std::endl;
@@ -45,7 +54,14 @@ void Encoder::generateKeys() {
 
   // Enable rotation with needed keys
   cc->EvalRotateKeyGen(keys.secretKey,
-                       {-12, -9, -6, -5, -3, 0, 1, 2, 4, 5, 6, 8});
+                       {-12, -9, -6, -5, -3, 0, 1, 2, 3, 4, 5, 6, 8});
+
+  // Enable Bootstrapping
+  // std::vector<uint32_t> levelBudget = {4, 4};
+  // std::vector<uint32_t> dim1 = {0, 0};
+  // // cc->EvalBootstrapSetup(levelBudget);
+  // cc->EvalBootstrapSetup(levelBudget, dim1, this->batch_size);
+  // cc->EvalBootstrapKeyGen(keys.secretKey, this->batch_size);
 }
 
 lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
@@ -169,21 +185,15 @@ lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
 Encoder::matmulXtDelta(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &Xt,
                        const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &delta,
                        size_t num_features, size_t num_rows) const {
-  auto delta_repeated =
-      _repeatBlock(delta, num_features * num_rows, num_features);
-
   std::vector<lbcrypto::Ciphertext<lbcrypto::DCRTPoly>> results;
-  auto ct_prod = cc->EvalMult(Xt, delta_repeated);
+  auto ct_prod = cc->EvalMult(Xt, delta);
 
-  std::vector<double> mask_vec({1, 1, 1, 1, 1, 0, 0, 0, 0, 0});
-  auto mask = cc->MakeCKKSPackedPlaintext(mask_vec);
-  auto ct_masked = cc->EvalMult(ct_prod, mask);
-  auto ct_sum = cc->EvalSum(ct_masked, num_features);
+  auto ct_sum = sumSlots(ct_prod, num_features);
   results.push_back(ct_sum);
 
-  ct_prod = cc->EvalRotate(ct_prod, 5);
-  auto ctMasked2 = cc->EvalMult(ct_prod, mask);
-  auto ct_sum2 = cc->EvalSum(ctMasked2, num_features);
+  auto Xt_rotated = cc->EvalRotate(Xt, 5);
+  ct_prod = cc->EvalMult(Xt_rotated, delta);
+  auto ct_sum2 = sumSlots(ct_prod, num_features);
   results.push_back(ct_sum2);
 
   auto ct_sum_matrix = cc->EvalMerge(results);
@@ -202,6 +212,12 @@ lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::sumColumn(
   result = cc->EvalMult(result, mask);
   result = _repeatBlock(result, rows, 1);
   return result;
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+Encoder::rotate(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt,
+                int32_t slots) const {
+  return cc->EvalRotate(ctxt, slots);
 }
 
 std::vector<double>
@@ -280,4 +296,9 @@ lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::applyChebyshevApproximation(
     double upper_bound, uint32_t poly_degree) const {
   return cc->EvalChebyshevFunction(func, ctxt, lower_bound, upper_bound,
                                    poly_degree);
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::applyBootstrapping(
+    const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt) const {
+  return cc->EvalBootstrap(ctxt);
 }

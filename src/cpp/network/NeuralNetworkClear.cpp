@@ -9,12 +9,12 @@ void NeuralNetworkClear::initializeWeightsAndBias() {
   for (size_t i = 0; i < layers.size(); i++) {
     // Create weight matrix: Rows=Amount of inputs, clumns=Amount of Neurons
     Eigen::MatrixXd w(prev, layers[i]);
-    w.setOnes();
+    w.setZero();
     weights.emplace_back(w);
 
     // Create Bias: Amount of Neurons
     Eigen::VectorXd b(layers[i]);
-    b.setOnes();
+    b.setConstant(-1.0);
     bias.emplace_back(b);
 
     prev = layers[i];
@@ -56,7 +56,7 @@ NeuralNetworkClear::forward(const Eigen::MatrixXd &X) const {
     z.rowwise() += bias[i].transpose();
 
     // Apply relu activation
-    h = relu(z);
+    h = sigmoid(z);
 
     z_layers.push_back(z);
     h_layers.push_back(h);
@@ -83,6 +83,16 @@ Eigen::MatrixXd NeuralNetworkClear::reluDeriv(const Eigen::MatrixXd &z) const {
   return (z.array() > 0.0).cast<double>();
 }
 
+Eigen::MatrixXd
+NeuralNetworkClear::sigmoid(const Eigen::MatrixXd &z_out) const {
+  return (1.0 / (1.0 + (-z_out.array()).exp())).matrix();
+}
+
+Eigen::MatrixXd
+NeuralNetworkClear::sigmoidDeriv(const Eigen::MatrixXd &h_out) const {
+  return (h_out.array() * (1.0 - h_out.array())).matrix();
+}
+
 // Whole training process
 void NeuralNetworkClear::train(int epochs, double learning_rate) {
   std::cout << "[Cleartext] Starting training process..." << std::endl;
@@ -103,12 +113,12 @@ void NeuralNetworkClear::train(int epochs, double learning_rate) {
     size_t N = static_cast<size_t>(h_out.rows());
 
     // Backprop
-    for (int l = layers.size() - 1; l >= 0; l--) {
+    for (int layer = layers.size() - 1; layer >= 0; layer--) {
       // Compute delta term: 2/N * error
       Eigen::MatrixXd delta = (2.0 / N) * error;
 
       // Compute relu derivative: Relu'(z)
-      Eigen::MatrixXd relu_deriv = reluDeriv(z_out);
+      Eigen::MatrixXd relu_deriv = sigmoidDeriv(h_out);
 
       // Multiply delta term with relu' and extract result
       delta = delta.cwiseProduct(relu_deriv);
@@ -120,8 +130,8 @@ void NeuralNetworkClear::train(int epochs, double learning_rate) {
       Eigen::MatrixXd grad_w = Xt * delta;
 
       // Update bias and weights
-      bias[l] -= learning_rate * grad_b;
-      weights[l] -= learning_rate * grad_w;
+      bias[layer] -= learning_rate * grad_b;
+      weights[layer] -= learning_rate * grad_w;
     }
     std::cout << "[CLEARTEXT] Training process running.. Epoch " << epoch << "/"
               << epochs << std::endl

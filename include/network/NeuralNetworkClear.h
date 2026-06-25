@@ -22,6 +22,9 @@ public:
   Eigen::MatrixXd relu(const Eigen::MatrixXd &y_pred) const;
   Eigen::MatrixXd reluDeriv(const Eigen::MatrixXd &z) const;
 
+  Eigen::MatrixXd sigmoid(const Eigen::MatrixXd &z_out) const;
+  Eigen::MatrixXd sigmoidDeriv(const Eigen::MatrixXd &h_out) const;
+
 protected:
   void initializeWeightsAndBias() override;
 
