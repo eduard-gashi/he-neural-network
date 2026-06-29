@@ -121,7 +121,16 @@ Therefore, the ciphertext storage expansion factor is:
 
 ### Runtime
 
-The main program was executed 30 times on a dedicated Linux server. The average runtime was measured to evaluate the computational overhead introduced by homomorphic encryption.
+The main program was executed 30 times on a Intel Core Ultra 7 155H (3.80 GHz). The measured results were as follows:
+
+Cleartext:
+Mean = `0.14984ms`, Standard Deviation = `0.03171ms`
+
+Ciphertext:
+Mean = `2175.76ms`, Standard Deviation = `339.97ms`
+
+The training duration increased by a factor of 14,520, demonstrating the impracticality of training encrypted complex neural networks on real-world-sized datasets. Encrypted inference however is way more practical, since it requires way less computations than training.
+
 
 ### Precision
 
