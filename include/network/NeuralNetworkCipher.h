@@ -40,7 +40,8 @@ public:
                size_t slots) const;
 
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
-  predict(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &x) const;
+  predict(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &x,
+          const Encoder &encoder_user) const;
 
 protected:
   void initializeWeightsAndBias() override;

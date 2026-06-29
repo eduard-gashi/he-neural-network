@@ -3,7 +3,7 @@
 #include "openfhe.h"
 
 struct CryptoConfig {
-  uint32_t mult_depth = 16;
+  uint32_t mult_depth = 18;
   uint32_t scaled_mod_size = 33;
   uint32_t batch_size = 16;
   lbcrypto::SecurityLevel security_level = lbcrypto::HEStd_128_classic;

@@ -6,7 +6,6 @@
 #include <sstream>
 #include <string>
 
-
 // Needed for serialization
 #include "ciphertext-ser.h"
 #include "cryptocontext-ser.h"
@@ -18,8 +17,8 @@ const std::filesystem::path DATAFOLDER =
     std::filesystem::path(__FILE__).parent_path() / "saved_data";
 
 size_t cleartext_memory(const Eigen::MatrixXd &matrix) {
-  size_t size = static_cast<size_t>(matrix.rows()) *
-                static_cast<size_t>(matrix.cols()) * sizeof(double);
+  size_t size =
+      static_cast<size_t>(matrix.size()) * sizeof(double) + sizeof(matrix);
   return size;
 }
 

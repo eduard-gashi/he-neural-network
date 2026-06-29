@@ -17,8 +17,10 @@ public:
     generateKeys();
   }
 
-  // CryptoContext Getter
+  // Getters
   const lbcrypto::CryptoContext<lbcrypto::DCRTPoly> &getCryptoContext() const;
+
+  const lbcrypto::PublicKey<lbcrypto::DCRTPoly> &getPublicKey() const;
 
   // Decryption (only possible with secret_key)
   Eigen::MatrixXd decrypt(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &ctxt,
@@ -59,6 +61,10 @@ public:
 
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
   encodeMatrixOnce(const Eigen::MatrixXd &matrix) const;
+
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
+  encodeUserData(const Eigen::MatrixXd &matrix,
+                 lbcrypto::PublicKey<lbcrypto::DCRTPoly> public_key) const;
 
   // Matrix multiplication
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly>
@@ -116,6 +122,8 @@ private:
 private:
   lbcrypto::KeyPair<lbcrypto::DCRTPoly> keys;
   lbcrypto::CryptoContext<lbcrypto::DCRTPoly> cc;
+  std::shared_ptr<std::map<uint32_t, lbcrypto::EvalKey<lbcrypto::DCRTPoly>>>
+      sum_cols_keys;
 
   uint32_t batch_size;
   uint32_t mult_depth;

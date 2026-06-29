@@ -229,19 +229,20 @@ void NeuralNetworkCipher::train(int epochs, double learning_rate) {
 }
 
 lbcrypto::Ciphertext<lbcrypto::DCRTPoly> NeuralNetworkCipher::predict(
-    const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &X_test) const {
+    const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &X_test,
+    const Encoder &encoder_user) const {
+  // Encode weights and bias with users public key to enable homomorphic
+  // computations on encrypted user data
+  Eigen::MatrixXd weights_clear = encoder.decrypt(weights_encoded[0], 3);
+  auto weights_user_ctxt = encoder_user.encodeMatrixOnce(weights_clear);
+  Eigen::MatrixXd bias_clear = encoder.decrypt(bias_encoded[0], 1);
+  auto bias_user_ctxt = encoder_user.encodeMatrixOnce(bias_clear);
+
   // Compute prediction for unseen data: X_test*W + b
-  auto y_pred =
-      encoder.matmulXW(X_test, encoder.rotate(weights_encoded[0], 1), 2);
-  y_pred = encoder.add(y_pred, bias_encoded[0]);
-  y_pred = encoder.extractColumn(y_pred, 1, shape[1], 1);
-  // y_pred = encoder.applyChebyshevApproximation(
-  //     [](double x) -> double {
-  //       if (x < 0.5)
-  //         return 0.0;
-  //       else
-  //         return 1;
-  //     },
-  //     y_pred, 0.0, 1.5, 3);
+  auto y_pred = encoder_user.matmulXW(
+      X_test, encoder_user.rotate(weights_user_ctxt, 1), 2);
+  y_pred = encoder_user.add(y_pred, bias_user_ctxt);
+  y_pred = encoder_user.extractColumn(y_pred, 1, shape[1], 1);
+  y_pred = sigmoid(y_pred, 1);
   return y_pred;
 }
