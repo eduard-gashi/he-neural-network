@@ -1,6 +1,15 @@
 #include "Encoder.h"
 #include "openfhe.h"
 
+const lbcrypto::CryptoContext<lbcrypto::DCRTPoly> &
+Encoder::getCryptoContext() const {
+  return cc;
+}
+
+const lbcrypto::PublicKey<lbcrypto::DCRTPoly> &Encoder::getPublicKey() const {
+  return keys.publicKey;
+}
+
 void Encoder::setupCryptoContext(uint32_t batch_size, uint32_t mult_depth,
                                  uint32_t scale_mod_size,
                                  lbcrypto::SecurityLevel security_level) {
@@ -55,6 +64,9 @@ void Encoder::generateKeys() {
   // Enable rotation with needed keys
   cc->EvalRotateKeyGen(keys.secretKey,
                        {-12, -9, -6, -5, -3, 0, 1, 2, 3, 4, 5, 6, 8});
+
+  // Enable column summation
+  sum_cols_keys = cc->EvalSumColsKeyGen(keys.secretKey);
 
   // Enable Bootstrapping
   // std::vector<uint32_t> levelBudget = {4, 4};
@@ -165,8 +177,7 @@ Encoder::matmulXW(const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &X,
                   const lbcrypto::Ciphertext<lbcrypto::DCRTPoly> &W,
                   size_t num_features) const {
   auto ct_prod = cc->EvalMult(X, W);
-  auto sum_cols_key = cc->EvalSumColsKeyGen(keys.secretKey);
-  auto ct_sum_matrix = cc->EvalSumCols(ct_prod, num_features, *sum_cols_key);
+  auto ct_sum_matrix = cc->EvalSumCols(ct_prod, num_features, *sum_cols_keys);
   return ct_sum_matrix;
 }
 
@@ -288,6 +299,14 @@ lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::encodeMatrixPadded(
   auto padded = _repeatToSlots(flat, this->batch_size);
   lbcrypto::Plaintext pt = cc->MakeCKKSPackedPlaintext(padded);
   return cc->Encrypt(keys.publicKey, pt);
+}
+
+lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::encodeUserData(
+    const Eigen::MatrixXd &matrix,
+    lbcrypto::PublicKey<lbcrypto::DCRTPoly> public_key) const {
+  auto flat = _flattenMatrix(matrix);
+  lbcrypto::Plaintext pt = cc->MakeCKKSPackedPlaintext(flat);
+  return cc->Encrypt(public_key, pt);
 }
 
 lbcrypto::Ciphertext<lbcrypto::DCRTPoly> Encoder::applyChebyshevApproximation(
