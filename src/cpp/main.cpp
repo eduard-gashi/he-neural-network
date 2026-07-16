@@ -29,6 +29,93 @@ void test_prediction_user_data(const NeuralNetworkCipher &nn_encoded,
   std::cout << "Class: " << y_pred_class << std::endl;
 }
 
+void test_bootstrapping(Eigen::MatrixXd X, int ring_dimension) {
+  /* Bootstrapping workflow
+   * 1. Modulus Raising
+   * 2. Coefficients to Slots
+   * 3. Evaluate the Approximate Modular Reduction
+   * 4. Slots to Coefficients
+   * The number of levels required to be available before bootstrapping is 1 to
+   * support a multiplication (and one more for FLEXIBLEAUTOEXT).
+   */
+  lbcrypto::CCParams<lbcrypto::CryptoContextCKKSRNS> parameters;
+  lbcrypto::SecretKeyDist secretKeyDist = lbcrypto::UNIFORM_TERNARY;
+  parameters.SetSecretKeyDist(secretKeyDist);
+
+  parameters.SetSecurityLevel(lbcrypto::HEStd_NotSet);
+  parameters.SetRingDim(ring_dimension); // Set ring rimdension
+
+  parameters.SetScalingModSize(59);
+  parameters.SetScalingTechnique(lbcrypto::FLEXIBLEAUTO);
+  parameters.SetFirstModSize(60);
+
+  std::vector<uint32_t> levelBudget = {4, 4};
+
+  uint32_t levelsAvailableAfterBootstrap = 10;
+  uint32_t depth =
+      levelsAvailableAfterBootstrap +
+      lbcrypto::FHECKKSRNS::GetBootstrapDepth(levelBudget, secretKeyDist);
+  parameters.SetMultiplicativeDepth(depth);
+
+  lbcrypto::CryptoContext<lbcrypto::DCRTPoly> cryptoContext =
+      lbcrypto::GenCryptoContext(parameters);
+
+  cryptoContext->Enable(lbcrypto::PKE);
+  cryptoContext->Enable(lbcrypto::KEYSWITCH);
+  cryptoContext->Enable(lbcrypto::LEVELEDSHE);
+  cryptoContext->Enable(lbcrypto::ADVANCEDSHE);
+  cryptoContext->Enable(lbcrypto::FHE);
+
+  uint32_t ringDim = cryptoContext->GetRingDimension();
+  uint32_t numSlots = ringDim / 2;
+  std::cout << "CKKS scheme ring dimension: " << ringDim << "\n\n";
+
+  cryptoContext->EvalBootstrapSetup(levelBudget, {0, 0}, numSlots);
+
+  auto keyPair = cryptoContext->KeyGen();
+  cryptoContext->EvalMultKeyGen(keyPair.secretKey);
+  cryptoContext->EvalBootstrapKeyGen(keyPair.secretKey, numSlots);
+
+  Eigen::VectorXd col = X.col(0);
+  std::vector<double> x(col.data(), col.data() + col.size());
+  size_t encodedLength = x.size();
+
+  // Start with a depleted ciphertext that has used up all of its levels
+  lbcrypto::Plaintext ptxt =
+      cryptoContext->MakeCKKSPackedPlaintext(x, 1, depth - 1);
+
+  ptxt->SetLength(encodedLength);
+  std::cout << "Input: " << ptxt << "\n";
+
+  lbcrypto::Ciphertext<lbcrypto::DCRTPoly> ciph =
+      cryptoContext->Encrypt(keyPair.publicKey, ptxt);
+
+  std::cout << "Initial number of levels remaining: "
+            << depth - ciph->GetLevel() << "\n\n";
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  // Perform the bootstrapping operation. The goal is to increase the number of
+  // levels remaining for HE computation.
+  auto ciphertextAfter = cryptoContext->EvalBootstrap(ciph);
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  std::cout << "Bootstrapping time: "
+            << std::chrono::duration<double>(stop - start).count() << " s\n\n";
+
+  std::cout << "Number of levels remaining after bootstrapping: "
+            << depth - ciphertextAfter->GetLevel() -
+                   (ciphertextAfter->GetNoiseScaleDeg() - 1)
+            << "\n\n";
+
+  lbcrypto::Plaintext result;
+  cryptoContext->Decrypt(keyPair.secretKey, ciphertextAfter, &result);
+  result->SetLength(encodedLength);
+  std::cout << "Output after bootstrapping: " << result << "\n";
+
+  cryptoContext->ClearStaticMapsAndVectors();
+}
+
 int main() {
   // Hyperparameters
   CryptoConfig crypto_cfg;
