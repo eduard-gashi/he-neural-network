@@ -26,7 +26,7 @@ To make this work, add the directory containing the `Eigen/` folder to your comp
 
 ## Data
 
-The dataset used in this project is small and simple. It consists of a 5x2 input matrix and binary labels:
+The dataset used in this project consists of a 5x2 input matrix and binary labels:
 
 ```text
 X =
@@ -57,6 +57,39 @@ The model is a simple single-neuron network with a sigmoid activation function a
 Homomorphically encrypted training is implemented in `NeuralNetworkCipher.cpp`.  
 Matrix multiplications are approximated using ciphertext rotations and masking operations.
 The sigmoid activation function is approximated using the polynomial Chebychev approximation with a polynom degree of 3.
+
+
+### Encrypted Matrix Multiplication
+
+The most expensive part and technically difficult part of encrypted neural-network training is matrix multiplication.
+
+The function `Encoder::matmulXtDelta` computes the encrypted matrix-vector product:
+
+\[
+X^t * delta
+\]
+
+where \(X^t\) contains the transposed input features and \(\delta\) contains the encrypted error terms used for the gradient update.
+
+The computation is performed entirely on ciphertexts:
+
+1. **Slot-wise multiplication**  
+   `EvalMult(Xt, delta)` multiplies the packed values of `Xt` and `delta` component-wise. This produces the individual products \(X_{ij}\delta_i\) across the ciphertext slots.
+
+2. **Block-wise summation**  
+   `sumSlots(ct_prod, num_features)` sums the products belonging to one feature. This reduces each feature block to a single accumulated value in slot 0.
+
+3. **Rotation for the next feature**  
+   `EvalRotate(Xt, 5)` rotates the packed feature matrix so that the values of the next feature are aligned with `delta`. The multiplication and block-wise summation are repeated to compute the second encrypted dot product.
+
+4. **Merging partial results**  
+   `EvalMerge(results)` combines the accumulated values from both feature computations into a single ciphertext.
+
+5. **Result alignment and replication**  
+   `EvalRotate(ct_sum_matrix, -1)` places the resulting gradient values into the correct slot positions. `_repeatBlock(ct_sum_matrix, 15, 3)` then replicates the result so that it can be used efficiently in the subsequent encrypted update step.
+
+No intermediate result is decrypted. However, the approach requires ciphertext rotations, which need additional rotation keys and contribute significantly to runtime and multiplicative depth.
+
 
 ## Cryptographic Hyperparameters
 
@@ -137,3 +170,76 @@ The training duration increased by a factor of 14,520, demonstrating the impract
 The numerical precision is primarily determined by `scale_mod_size`. For larger numbers of epochs, a higher `scale_mod_size` is required to preserve comparable numerical accuracy.
 
 Lower values of `scale_mod_size` improve performance but reduce precision.
+
+
+## How to Run
+
+### Prerequisites
+
+Make sure the following are installed:
+
+- A C++ compiler with C++17 support
+- CMake
+- Ninja
+- OpenFHE
+- Eigen
+
+### Build
+
+From the project root, create and enter a build directory:
+
+```bash
+mkdir build
+cd build
+```
+
+Configure the project with CMake and generate Ninja build files:
+
+```bash
+cmake .. -G Ninja
+```
+
+Build the project using Ninja. The `-j` option specifies the number of parallel build jobs. It can be replaced by the number of CPU cores you want to use:
+
+```bash
+ninja -j4
+```
+
+Alternatively, use all available CPU cores:
+
+```bash
+ninja -j$(nproc)
+```
+
+On Windows PowerShell, use:
+
+```powershell
+ninja -j$env:NUMBER_OF_PROCESSORS
+```
+
+### Run
+
+After a successful build, run the executable from the `build` directory:
+
+```bash
+./main.exe
+```
+
+On Windows, you can also run:
+
+```powershell
+.\main.exe
+```
+
+### Clean Rebuild
+
+To remove the build files and start again:
+
+```bash
+cd ..
+rm -rf build
+mkdir build
+cd build
+cmake .. -G Ninja
+ninja -j4
+```
