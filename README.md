@@ -117,53 +117,6 @@ In this implementation, each training epoch requires a multiplicative depth of 1
 
 `scale_mod_size` controls the precision with which floating-point values are represented inside the ciphertext. Larger values usually improve numerical precision, but they make encrypted computation slower shich makes training longer.
 
-## Benchmarks
-
-### Storage
-
-**Cleartext training data**  
-The cleartext training data consists of 15 double values. Since one `double` occupies 8 bytes, the total memory footprint is:
-
-15 × 8B = 120B
-
-If the size of the MatrixXd-Object is added, storage becomes:
-
-120B + 24B = 144B
-
-**Ciphertext training data**  
-The size of a ciphertext object depends on the chosen security level, multiplicative depth, and scale modulus size. These parameters determine the required ring dimension, which determines the storage size of a ciphertext.
-
-For one epoch and a security level of 128-Bit, a multiplicative depth of 16 and a ring dimension of `2^15 = 32.768` were required, resulting in a ciphertext size of `9.437.184 bytes`.
-
-## Ciphertext training data
-
-The storage footprint increased from 144 B to 9 MB. However, a single CKKS ciphertext can pack up to Ringdimension/2 slots, so with a ring dimension of `2^15 = 32.768`, we can encode `2^14 = 16.384` double values in one ciphertext.
-
-Since each double requires 8B, this corresponds to:
-
-
-`16.384 x 8B = 131.072 = 0.125MB`
-
-Including an additional 24 B of Eigen-Object size gives:
-
-`131.072 + 24B = 131.096 = 0.125MB`
-
-Therefore, the ciphertext storage expansion factor is:
-
-`9MB \ 0.125MB = 72`
-
-### Runtime
-
-The main program was executed 30 times on a Intel Core Ultra 7 155H (3.80 GHz). The measured results were as follows:
-
-Cleartext:
-Mean = `0.14984ms`, Standard Deviation = `0.03171ms`
-
-Ciphertext:
-Mean = `2175.76ms`, Standard Deviation = `339.97ms`
-
-The training duration increased by a factor of 14,520, demonstrating the impracticality of training encrypted complex neural networks on real-world-sized datasets. Encrypted inference however is way more practical, since it requires way less computations than training.
-
 
 ### Precision
 
