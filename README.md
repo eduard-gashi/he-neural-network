@@ -2,7 +2,7 @@
 
 Privacy-preserving neural network in C++ using OpenFHE.
 
-This project explores encrypted training and inference and analyzes their impact on runtime, memory usage, and practical feasibility.
+This project explores how encrypted training and inference can be implemented in a neural network.
 
 ## Dependencies
 
